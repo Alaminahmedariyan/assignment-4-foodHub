@@ -1,0 +1,339 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// prisma/schema.prisma
+
+// enums -------------------
+
+enum Role {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum OrderStatus {
+  PLACED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum AddressType {
+  HOME
+  OFFICE
+  OTHER
+}
+
+//////////////////// USER ////////////////////
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  phone     String?  @db.VarChar(20)
+
+  role      Role       @default(CUSTOMER)
+  status    UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  providerProfile   ProviderProfile?
+  orders            Order[]
+  reviews           Review[]
+  addresses         Address[]
+  cart              Cart?
+  favoriteMeals     FavoriteMeal[]
+  favoriteProviders FavoriteProvider[]
+
+  @@index([role])
+}
+
+//////////////////// ADDRESS ////////////////////
+
+model Address {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  addressType AddressType @default(HOME)
+  fullAddress String
+  area        String
+  city        String
+
+  isDefault   Boolean     @default(false)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  orders      Order[]
+
+  @@index([userId])
+}
+
+//////////////////// PROVIDER PROFILE ////////////////////
+
+model ProviderProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  restaurantName String
+  description    String?
+  address        String
+  city           String
+  phone          String
+
+  deliveryTime   String?
+  deliveryFee    Decimal? @db.Decimal(10, 2)
+  minOrderAmount Decimal? @db.Decimal(10, 2)
+
+  logoUrl        String?
+  rating         Float    @default(0)
+  totalRatings   Int      @default(0)
+
+  isOpen         Boolean  @default(true)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  meals             Meal[]
+  orders            Order[]
+  reviews           Review[]
+  favoriteProviders FavoriteProvider[]
+  cuisines          ProviderCuisine[]
+
+  @@index([city])
+}
+
+//////////////////// CUISINE ////////////////////
+
+model Cuisine {
+  id    String @id @default(cuid())
+  name  String @unique
+  slug  String @unique
+
+  providers ProviderCuisine[]
+}
+
+model ProviderCuisine {
+  providerId String
+  cuisineId  String
+
+  provider ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  cuisine  Cuisine         @relation(fields: [cuisineId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, cuisineId])
+}
+
+//////////////////// CATEGORY ////////////////////
+
+model Category {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  slug     String  @unique
+  imageUrl String?
+
+  meals Meal[]
+}
+
+//////////////////// MEAL ////////////////////
+
+model Meal {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?
+
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  providerId  String
+  provider    ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  isVegetarian Boolean @default(false)
+  isAvailable  Boolean @default(true)
+  isBestSeller Boolean @default(false)
+
+  rating       Float   @default(0)
+  totalRatings Int     @default(0)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orderItems   OrderItem[]
+  reviews      Review[]
+  cartItems    CartItem[]
+  favorites    FavoriteMeal[]
+
+  @@index([providerId])
+  @@index([categoryId])
+}
+
+//////////////////// ORDER ////////////////////
+
+model Order {
+  id          String   @id @default(cuid())
+  orderNumber String   @unique
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  providerId  String
+  provider    ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Restrict)
+
+  addressId   String?
+  address     Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  items       OrderItem[]
+
+  subtotal    Decimal  @db.Decimal(10, 2)
+  totalAmount Decimal  @db.Decimal(10, 2)
+
+  deliveryAddress String
+  phoneNumber     String
+  specialNote     String?
+
+  status        OrderStatus   @default(PLACED)
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([providerId])
+}
+
+//////////////////// ORDER ITEM ////////////////////
+
+model OrderItem {
+  id       String @id @default(cuid())
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  mealId   String
+  meal     Meal   @relation(fields: [mealId], references: [id])
+
+  mealName String
+  quantity Int
+  price    Decimal @db.Decimal(10, 2)
+
+  review   Review?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+//////////////////// REVIEW ////////////////////
+
+model Review {
+  id      String  @id @default(cuid())
+  rating  Int
+  comment String?
+
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mealId  String
+  meal    Meal    @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  providerId String
+  provider   ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  orderItemId String    @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  reply   String?
+  replyAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([mealId])
+}
+
+//////////////////// CART ////////////////////
+
+model Cart {
+  id      String   @id @default(cuid())
+  userId  String   @unique
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items   CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CartItem {
+  id       String   @id @default(cuid())
+  cartId   String
+  cart     Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  mealId   String
+  meal     Meal     @relation(fields: [mealId], references: [id])
+
+  quantity Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, mealId])
+}
+
+//////////////////// FAVORITES ////////////////////
+
+model FavoriteMeal {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mealId String
+  meal   Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, mealId])
+}
+
+model FavoriteProvider {
+  id         String          @id @default(cuid())
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  providerId String
+  provider   ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime        @default(now())
+
+  @@unique([userId, providerId])
+}
