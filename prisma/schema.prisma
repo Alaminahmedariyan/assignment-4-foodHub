@@ -160,7 +160,7 @@ model Category {
   slug     String  @unique
   imageUrl String?
 
-  meals Meal[]
+  meals    Meal[]
 }
 
 //////////////////// MEAL ////////////////////
